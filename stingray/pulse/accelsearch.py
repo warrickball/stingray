@@ -84,7 +84,7 @@ def data_and_error(data, error):
 def create_responses(range_z):
     log.info("Creating responses")
     responses = []
-    for j, z in enumerate(tqdm.tqdm(range_z)):
+    for j, z in enumerate(show_progress(range_z)):
         # fdot = z / T**2
         if( np.abs( z ) < 0.01 ):
              responses.append(0)
@@ -117,7 +117,7 @@ def calculate_all_convolutions(A, responses, n_photons, freq_intv_to_search,
     candidate_js = [2]
     r_freqs_to_search = np.arange(A.size)[freq_intv_to_search]
     len_responses = len(responses)
-    for j in tqdm.tqdm(prange(len_responses)):
+    for j in show_progress(prange(len_responses)):
         response = responses[j]
         if np.asarray(response).size == 1:
              accel = A
