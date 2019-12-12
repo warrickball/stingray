@@ -1,222 +1,204 @@
+from collections.abc import Iterable
+
 import numpy as np
 import scipy
 from scipy import special
-import matplotlib.pyplot as plt
-from mpl_toolkits.mplot3d import Axes3D
-from matplotlib import cm
-from matplotlib.ticker import LinearLocator, FormatStrFormatter
-from mpl_toolkits.mplot3d import axes3d
-from scipy import signal
-from scipy.fftpack import fft, fftshift
-from scipy.fftpack import fft, fftshift
-import sys
-import accel_utils
-from scipy.integrate import trapz
-import time
-#this function work just on chunks, never use it for FFT long more than 1e**3
+from astropy import log
+from astropy.table import Table
 
-def accelsearch( spectr, freq, T, vi = False, delta_rdot = 1 ):
-    center = int( len( freq ) / 2 )
-    # range rdot
-    start_rdot = -20#-20*delta_rdot 
-    end_rdot = 20#-start_rdot + delta_rdot
-    range_rdot = np.arange(start_rdot,end_rdot, delta_rdot)
-    print("min and max possible r_dot: " + str( delta_rdot / (T**2) )+ " " + str( np.max(range_rdot) / (T**2)))
-    #maximum m index, 
-    maximum_m_idx = 2 * int( np.max(range_rdot) )
-    #centering the box in the interesting fequencys
-    min_freq_idx = center - 2 * int ( maximum_m_idx / 2 )
-    max_freq_idx = center + 2 * int ( maximum_m_idx / 2 ) + 1
-    interest_freq = freq[ min_freq_idx : max_freq_idx ] 
-    interest_spectr = spectr[ min_freq_idx : max_freq_idx ]
-    #dimension where calculate the complex filter
-    N = len( interest_freq )
-    M = len( range_rdot )
-    mesh = np.zeros( ( N, M ), dtype = np.complex128 ) 
-    #filter and fill the mesh
-    A = spectr #i am using the same letters of the formula
-    r = freq * T 
-    
-    for i in range(0,N):
-        r_zero =  interest_freq[i] * T 
-        for j in range(0,M):
-            rdot = range_rdot[j]
-            m =  np.int( 2 * rdot)#np.abs( np.rint( ( 2 * rdot ) ) )#maximum_m_idx
-            if( np.abs( rdot ) > 0.01 ):
+import tqdm
+from numba import njit, prange
 
-                factor = 1 / scipy.sqrt( 2 * rdot )
-
-                kmin = center - int( (m / 2) )
-                kmax = center + int( (m / 2) )
-
-                element = 0
-                for k in range(kmin, kmax +1): #( kmin -1, kmax  )
-                    q_k =  r_zero - np.int( r[k] ) 
-
-                    exponential = scipy.exp(1j * np.pi * q_k**2 /  rdot  )
-
-                    Yk = scipy.sqrt( 2 * rdot ) * q_k
-                    Zk = scipy.sqrt( 2 * rdot ) * ( q_k + rdot )
-                    [SZ, CZ] = special.fresnel(Zk)
-                    [SY, CY] = special.fresnel(Yk)
-                    weight = SZ - SY - 1j * (CY - CZ)
-
-                    element = element + A[k] * weight * exponential * factor 
-
-                mesh[i,j] =  element
-        print (  str(round( 100 * i / N, 2 ) ) + "%")
-    rdot_center = np.argmin(np.abs(range_rdot))    
-    np.transpose(mesh)[rdot_center] = interest_spectr
-
-           
-    if vi == True :
-        accel_utils.plot(interest_freq, range_rdot, np.abs( mesh ) ) 
-    
-    
-    maximum = np.unravel_index(np.argmax(abs(mesh), axis=None), mesh.shape)
-    # print( "max index on the matrix: " + str( maximum ))
-    
-    return interest_freq[ maximum[0] ] , range_rdot[maximum[1]] / T**2 #+ int( delta_rdot**-1 ) 
+from ..gti import create_gti_mask
 
 
+@njit()
+def pds_from_fft(spectr, nph):
+    return (spectr * spectr.conj()).real * 2 / nph
 
 
-#this function get the power, find an interesting point to start to seach, cut the FFT and
-#call call the accelsearch method to find f and fdot
-def find_frequency_and_fdot( times, signal, vi = False, interbin = False, delta_r = 1, delta_rdot = 1 ):
+def probability_of_power(level, nbins, n_summed_spectra=1, n_rebin=1):
+    r"""Give the probability of a given power level in PDS.
 
-    N, dt, T, spectr, freq = accel_utils.get_info( times, signal)
-    uncert_f = accel_utils.get_uncert_f( spectr, freq ) #and uncertain deltaR ?
-    # print(uncert_f)
-    if interbin:
-        freq, spectr = accel_utils.my_interbin_fft(freq, spectr)
-        N = 2 * N
-        #T = 2 * T
-    # if delta_r < 1:
-    #     T, N, freq, spectr = accel_utils.fft_interpolation(spectr, freq, T, dt, delta_r, uncert_f )  
-    int_spectr, int_freq  = accel_utils.interest_search( spectr, freq, uncert_f )
-    #print(int_spectr.size, int_freq.size)
-    #print(int_freq[int(len(int_spectr) / 2)])
-     
-    return accelsearch( int_spectr, int_freq, T, vi , delta_rdot)
-
-def plot_f_fdot( times, signal, interbin = False, delta_r = 1, delta_rdot = 1 ):
-    flag = interbin
-    r = delta_r
-    rdot = delta_rdot
-    return find_frequency_and_fdot(times, signal, vi = True, interbin = flag, delta_r = r, delta_rdot = rdot )
-    
-    
-    
-    ###############################################################################################################################
-    
-    import numpy as np
-import scipy
-from scipy import special
-import matplotlib.pyplot as plt
-from mpl_toolkits.mplot3d import Axes3D
-from matplotlib import cm
-from matplotlib.ticker import LinearLocator, FormatStrFormatter
-from mpl_toolkits.mplot3d import axes3d
-from scipy import signal
-from scipy.fftpack import fft, fftshift
-from scipy.fftpack import fft, fftshift
-import sys
-import accel_utils
-
-
-def nearest_value_idx( array, value ):
-    array = np.asarray(array)
-    idx = (np.abs(array - value)).argmin()
-    return idx
-
-
-def nearest_freq( power , freq, pow_value ):
-    idx = nearest_value_idx( power, pow_value )
-    return freq[idx]
-
-
-def get_power( spectr ):
-    return np.abs( spectr )**2
-
-
-def get_norm_power( spectr ): 
-    Nph = np.abs( spectr[0] )
-    return 2 * get_power ( spectr ) / Nph
-
-
-def get_dt( times ):
-    return times[1] - times[0]
-
-# it is focused on the postive frequencys
-def get_uncert_f( spectr, frequency ):
-    N = len(frequency)
-    power = get_norm_power( spectr )
-    _, bins = np.histogram( power , bins = 50 )
-    return nearest_freq( power[0:int(N / 2)], frequency[0:int(N / 2)], np.median( bins ) )
-
-
-#it is usefull to study only a little portion of the f-fdot plane
-def interest_search(  spectr, freq, uncert_f ):
-    # i should add a delta_R code to choose the best min freq and max freq
-    N = len( freq )
-    delta =  5 * np.int( N / ( 10 ** (np.log10( N ) -2 ) ) + 1) 
-    center = nearest_value_idx( freq, uncert_f ) #int(N / 2) #
-    lside = center - delta
-    rside = center + delta + 1
-    return spectr[ lside : rside ], freq[ lside : rside ] 
-
-def get_info( times, signal ):
-    N = len( times )
-    dt = get_dt( times )
-    T = N * dt
-    spectr = np.fft.fft( signal )[0 : int( N / 2) ] 
-    freq = np.fft.fftfreq( N , dt)[0 : int( N / 2) ] 
-    return N, dt, T, spectr, freq
-
-
-
-def plot( freq, range_rdot, mesh):
-    # X = freq
-    # Y = range_rdot
-    # fig = plt.figure()
-    # ax = fig.add_subplot(111, projection='3d')
-    # X, Y = np.meshgrid( X, Y )
-
-    # # Plot a basic wireframe.
-    # ax.plot_wireframe(Y, X,  np.transpose( mesh ), rstride=10, cstride=10)
-    # plt.show()
-
-    #2d projection
-    plt.imshow( np.transpose( abs(mesh) ), aspect = 'equal'  )
-    plt.show()
-
-
-
-def interbin_fft(freq, fft):
+    Return the probability of a certain power level in a Power Density
+    Spectrum of nbins bins, normalized a la Leahy (1983), based on
+    the 2-dof :math:`{\chi}^2` statistics, corrected for rebinning (n_rebin)
+    and multiple PDS averaging (n_summed_spectra)
     """
+    try:
+        from scipy import stats
+    except Exception:  # pragma: no cover
+        raise Exception('You need Scipy to use this function')
+
+    epsilon = nbins * stats.chi2.sf(level * n_summed_spectra * n_rebin,
+                                    2 * n_summed_spectra * n_rebin)
+    return epsilon
+
+
+def detection_level(nbins, epsilon=0.01, n_summed_spectra=1, n_rebin=1):
+    r"""Detection level for a PDS.
+
+    Return the detection level (with probability 1 - epsilon) for a Power
+    Density Spectrum of nbins bins, normalized a la Leahy (1983), based on
+    the 2-dof :math:`{\chi}^2` statistics, corrected for rebinning (n_rebin)
+    and multiple PDS averaging (n_summed_spectra)
     Examples
     --------
-    >>> freq = [-1, -0.5, 0, 0.5, 1]
-    >>> fft = np.array([1, 0, 1, 0, 1])
-    >>> f, F = interbin_fft(freq, fft)
-    >>> np.allclose(f, [-1, -0.75, -0.5, -0.25, 0, 0.25, 0.5, 0.75, 1])
+    >>> np.isclose(detection_level(1, 0.1), 4.6, atol=0.1)
     True
-    >>> pi_4 = np.pi / 4
-    >>> np.allclose(F, [1, -pi_4, 0, pi_4, 1, -pi_4, 0, pi_4, 1])
+    >>> np.allclose(detection_level(1, 0.1, n_rebin=[1]), [4.6], atol=0.1)
     True
     """
-    freq = np.array(freq)
-    fft = np.array(fft)
-    order = np.argsort(freq)
+    try:
+        from scipy import stats
+    except Exception:  # pragma: no cover
+        raise Exception('You need Scipy to use this function')
 
-    freq = freq[order]
-    fft = fft[order]
+    if not isinstance(n_rebin, Iterable):
+        r = n_rebin
+        retlev = stats.chi2.isf(epsilon / nbins, 2 * n_summed_spectra * r) \
+            / (n_summed_spectra * r)
+    else:
+        retlev = [stats.chi2.isf(epsilon / nbins, 2 * n_summed_spectra * r) /
+                  (n_summed_spectra * r) for r in n_rebin]
+        retlev = np.array(retlev)
+    return retlev
 
-    new_freqs = np.linspace(freq[0], freq[-1], 2 * len(freq) - 1)
-    new_fft = np.zeros_like(new_freqs, dtype=type(fft[0]))
-    new_fft[::2] = fft
-    new_fft[1::2] = (fft[1:] - fft[:-1]) * np.pi / 4 
-    return new_freqs, new_fft
 
+def data_and_error(data, error):
+    sign = data / np.abs(data)
+
+    data_order_of_magn = np.int(np.log10(sign * data))
+    if data_order_of_magn < 0:
+        data_order_of_magn -= 1
+    data_resc = data / 10**data_order_of_magn
+    err_resc = error / 10**data_order_of_magn
+    return f'({data_resc} ± {err_resc:.1e})x10^{data_order_of_magn}'
+
+
+def create_responses(range_z):
+    log.info("Creating responses")
+    responses = []
+    for j, z in enumerate(tqdm.tqdm(range_z)):
+        # fdot = z / T**2
+        if( np.abs( z ) < 0.01 ):
+             responses.append(0)
+             continue
+
+        m = np.max([np.abs(np.int( 2 * z)), 40]) #np.abs( np.rint( ( 2 * z ) ) )#maximum_m_idx
+        sign = z / np.abs(z)
+        absz = np.abs(z)
+        factor = sign * 1 / scipy.sqrt( 2 * absz)
+
+        q_ks = np.arange(-m / 2, m / 2+ 1)
+
+        exponentials = scipy.exp(1j * np.pi * q_ks**2 / z)
+
+        Yks = sign * scipy.sqrt( 2 / absz ) * q_ks
+        Zks = sign * scipy.sqrt( 2 / absz ) * ( q_ks + z )
+        # print(Yks, Zks)
+        [SZs, CZs] = special.fresnel(Zks)
+        [SYs, CYs] = special.fresnel(Yks)
+        weights = SZs - SYs + 1j * (CYs - CZs)
+        responses.append(weights * exponentials * factor)
+    return responses
+
+
+def calculate_all_convolutions(A, responses, n_photons, freq_intv_to_search,
+                               detlev):
+    log.info("Convolving FFT with responses...")
+    candidate_powers = [0.]
+    candidate_rs = [1]
+    candidate_js = [2]
+    r_freqs_to_search = np.arange(A.size)[freq_intv_to_search]
+    len_responses = len(responses)
+    for j in tqdm.tqdm(prange(len_responses)):
+        response = responses[j]
+        if np.asarray(response).size == 1:
+             accel = A
+        else:
+            accel = np.convolve(A, response)
+            new_size = accel.size
+            diff = new_size - A.size
+            accel = accel[diff // 2: diff // 2 + A.size]
+
+        powers = pds_from_fft(accel, n_photons)
+
+        powers_to_search = powers[freq_intv_to_search]
+        candidate = powers_to_search > detlev
+        rs = r_freqs_to_search[candidate]
+        cand_powers= powers_to_search[candidate]
+        for i in range(len(rs)):
+            r = rs[i]
+            cand_power = cand_powers[i]
+            candidate_powers.append(cand_power)
+            candidate_rs.append(r)
+            candidate_js.append(j)
+
+    return candidate_rs, candidate_js, candidate_powers
+
+
+def accelsearch(times, signal, delta_z=1, fmin=1, fmax=1e32,
+                GTI=None, zmax=100, candidate_file=None, ref_time=0):
+    """Find pulsars with accelerated search.
+
+    The theory behind these methods is described in Ransom+02, AJ 124, 1788.
+
+    Parameters
+    ----------
+    times : array of floats
+        An evenly spaced list of times
+    signal : array of floats
+        The light curve, in counts; same length as ``times``
+    delta_z : float
+        The spacing in ``z`` space
+    """
+    dt = times[1] - times[0]
+    if GTI is not None:
+        # Fill in the data with a constant outside GTI
+        gti_mask = create_gti_mask(times, GTI)
+        bti_mask = ~gti_mask
+        signal[bti_mask] = np.median(signal[gti_mask])
+    else:
+        GTI = np.array(
+            [[times[0] - dt /2, times[-1] + dt / 2]])
+
+    n_photons = np.sum(signal)
+    spectr = np.fft.fft(signal)
+    freq = np.fft.fftfreq(len(spectr), dt)
+    T = times[-1] - times[0] + dt
+
+    freq_intv_to_search = (freq >= fmin) & (freq < fmax)
+    log.info("Starting search over full plane...")
+    start_z = -zmax#-20*delta_z
+    end_z = zmax#-start_z + delta_z
+    range_z = np.arange(start_z,end_z, delta_z)
+    log.info("min and max possible r_dot: {}--{}".format(delta_z/T**2,
+                                                         np.max(range_z)/T**2))
+    freqs_to_search = freq[freq_intv_to_search]
+
+    candidate_table = Table(
+        names=['time', 'power', 'prob', 'frequency', 'fdot', 'fddot'],
+        dtype=[float] * 6)
+
+    detlev = detection_level(freqs_to_search.size, epsilon=0.015)
+
+    RESPONSES = create_responses(range_z)
+
+    candidate_rs, candidate_js, candidate_powers = \
+        calculate_all_convolutions(spectr, RESPONSES, n_photons,
+                                   freq_intv_to_search, detlev)
+
+    for r, j, cand_power in zip(candidate_rs, candidate_js, candidate_powers):
+        z = range_z[j]
+        cand_freq = r / T
+        fdot = z / T**2
+        prob = probability_of_power(cand_power, freqs_to_search.size)
+        candidate_table.add_row(
+            [ref_time + GTI[0, 0], cand_power, prob, cand_freq, fdot, 0])
+
+    if candidate_file is not None:
+        candidate_table.write(candidate_file + '.csv', overwrite=True)
+
+    return candidate_table
 
