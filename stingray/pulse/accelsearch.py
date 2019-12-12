@@ -78,7 +78,8 @@ def data_and_error(data, error):
         data_order_of_magn -= 1
     data_resc = data / 10**data_order_of_magn
     err_resc = error / 10**data_order_of_magn
-    return f'({data_resc} ± {err_resc:.1e})x10^{data_order_of_magn}'
+    return '({data_resc} ± {err_resc:.1e})x10^{data_order_of_magn}'.format(
+        data_resc=data_resc, err_resc=err_resc, data_order_of_magn=data_order_of_magn)
 
 
 def create_responses(range_z):
