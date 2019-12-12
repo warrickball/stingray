@@ -6,8 +6,13 @@ from scipy import special
 from astropy import log
 from astropy.table import Table
 
-import tqdm
-from numba import njit, prange
+try:
+    from tqdm import tqdm as show_progress
+except ImportError:
+    def show_progress(a):
+        return a
+
+from ..utils import njit, prange
 
 from ..gti import create_gti_mask
 
