@@ -244,19 +244,21 @@ def interbin_fft(freq, fft):
     Examples
     --------
     >>> import numpy as np
-    >>> freq = [-1, -0.5, 0, 0.5, 1]
-    >>> fft = np.array([1, 0, 1, 0, 1], dtype=float)
+    >>> freq = [0, 0.5, 1, -1, -0.5]
+    >>> fft = np.array([1, 0, 1, 1, 0], dtype=float)
     >>> f, F = interbin_fft(freq, fft)
-    >>> np.allclose(f, [-1, -0.75, -0.5, -0.25, 0, 0.25, 0.5, 0.75, 1])
+    >>> np.allclose(f, [0, 0.25, 0.5, 0.75, 1, -1, -0.75, -0.5, -0.25])
     True
     >>> pi_4 = np.pi / 4
-    >>> np.allclose(F, [1, -pi_4, 0, pi_4, 1, -pi_4, 0, pi_4, 1])
+    >>> np.allclose(F, [1, -pi_4, 0, pi_4, 1, 1, -pi_4, 0, pi_4])
     True
     """
     import numpy as np
 
-    neglast = freq[-1] < 0
+    freq = np.asarray(freq)
+    fft = np.asarray(fft)
 
+    neglast = freq[-1] < 0
     if neglast:
         order = np.argsort(freq)
         freq = freq[order]
