@@ -114,7 +114,48 @@ def convolve(a, b):
 
 def _convolve_with_response(A, detlev, freq_intv_to_search, response_and_j,
                             interbin=False, n_photons=1):
-    response, j = response_and_j
+    """Accelerate the Fourier transform and find pulsations.
+    
+    This function convolves the initial Fourier transform with the response
+    corresponding to a constant acceleration, and searches for signals 
+    corresponding to candidate pulsations.
+    
+    Parameters
+    ----------
+    A : complex array
+        The initial FT
+    response_and_j : tuple
+        Tuple containing the response matrix corresponding to a given 
+        acceleration and its position in the list of reponses allocated
+        at the start of the procedure in ``accelsearch``.
+    detlev : float
+        The power level considered good for detection
+    freq_intv_to_search : bool array
+        Mask for ``A``, showing all spectral bins that should be searched
+        for pulsations. Note that we use the full array to calculate the 
+        convolution with the responses, but only these bins to search for
+        pulsations. Had we filtered the frequencies before the convolution,
+        we would be sure to introduce boundary effects in the "Good" 
+        frequency interval
+        
+    Other parameters
+    ----------------
+    n_photons : int
+        Number of photons that contributed to the Fourier Transform (used 
+        to estimate the detection level)
+    interbin : bool
+        Calculate interbinning to improve sensitivity to frequencies close
+        to the edge of PDS bins
+    nproc : int
+        Number of processors to be used for parallel computation.
+        
+    Returns
+    -------
+    result : list
+        List containing tuples of the kind (r, j, power) where 
+        r is the frequency in units of 1/ T, j is the index of the
+        acceleration response used and power is the spectral power
+    """    response, j = response_and_j
     r_freqs = np.arange(A.size)
     if np.asarray(response).size == 1:
         accel = A
@@ -144,10 +185,54 @@ def _convolve_with_response(A, detlev, freq_intv_to_search, response_and_j,
     return results
 
 
-# @njit(parallel=True)
 def _calculate_all_convolutions(A, responses, n_photons, freq_intv_to_search,
                                 detlev, debug=False, interbin=False,
                                 nproc=4):
+    """Accelerate the initial Fourier transform and find pulsations.
+    
+    This function convolves the initial Fourier transform with the responses
+    corresponding to different amounts of constant acceleration, and searches
+    for signals corresponding to candidate pulsations.
+    
+    Parameters
+    ----------
+    A : complex array
+        The initial FT
+    responses : list of complex arrays
+        List of response functions corresponding to different values of 
+        constant acceleration.
+    n_photons : int
+        Number of photons that contributed to the Fourier Transform (used 
+        to estimate the detection level)
+    freq_intv_to_search : bool array
+        Mask for ``A``, showing all spectral bins that should be searched
+        for pulsations. Note that we use the full array to calculate the 
+        convolution with the responses, but only these bins to search for
+        pulsations. Had we filtered the frequencies before the convolution,
+        we would be sure to introduce boundary effects in the "Good" 
+        frequency interval
+    detlev : float
+        The power level considered good for detection
+        
+    Other parameters
+    ----------------
+    debug : bool
+        Dump debugging information
+    interbin : bool
+        Calculate interbinning to improve sensitivity to frequencies close
+        to the edge of PDS bins
+    nproc : int
+        Number of processors to be used for parallel computation.
+        
+    Returns
+    -------
+    candidate_rs: array of float
+        Frequency of candidates in units of r = 1 / T
+    candidate_js: array of float
+        Index of the response used
+    candidate_powers: array of float
+        Power of candidates
+    """
     log.info("Convolving FFT with responses...")
     candidate_powers = [0.]
     candidate_rs = [1]
@@ -177,7 +262,7 @@ def _calculate_all_convolutions(A, responses, n_photons, freq_intv_to_search,
 
 
 def accelsearch(times, signal, delta_z=1, fmin=1, fmax=1e32,
-                GTI=None, zmax=100, candidate_file=None, ref_time=0,
+                gti=None, zmax=100, candidate_file=None, ref_time=0,
                 debug=False, interbin=False, nproc=4):
     """Find pulsars with accelerated search.
 
@@ -192,12 +277,12 @@ def accelsearch(times, signal, delta_z=1, fmin=1, fmax=1e32,
     Other parameters
     ----------------
     delta_z : float
-        The spacing in ``z`` space
+        The spacing in ``z`` space (delta_z = 1 -> delta_fdot = 1/T**2)
     fmin : float, default 1.
         Minimum frequency to search
     fmax : float, default 1e32
         Maximum frequency to search
-    GTI : ``[[gti00, gti01], [gti10, gti11], ...]``, default None
+    gti : ``[[gti00, gti01], [gti10, gti11], ...]``, default None
         Good Time Intervals. If None, it assumes the full range
         ``[[time[0] - dt / 2 -- time[-1] + dt / 2]]``
     zmax : int, default 100
@@ -205,21 +290,30 @@ def accelsearch(times, signal, delta_z=1, fmin=1, fmax=1e32,
         It corresponds to ``fdot_max = zmax / T**2``, where ``T`` is the
         length of the observation.
     candidate_file : str, default None
-        Save the final candidate table in this file.
+        Save the final candidate table to this file. If None, the table
+        is just returned and not saved.
     ref_time : float, default 0
         Reference time for the times
+
+    Returns
+    -------
+    candidate_table: :class:`Table`
+        Table containing the candidate frequencies and frequency derivatives,
+        the spectral power in Leahy normalization, the detection probability,
+        the time and the observation length. 
+    
     """
     times = np.asarray(times)
     signal = np.asarray(signal)
     dt = times[1] - times[0]
-    if GTI is not None:
-        GTI = np.asarray(GTI)
-        # Fill in the data with a constant outside GTI
-        gti_mask = create_gti_mask(times, GTI)
+    if gti is not None:
+        gti = np.asarray(gti)
+        # Fill in the data with a constant outside GTIs
+        gti_mask = create_gti_mask(times, gti)
         bti_mask = ~gti_mask
         signal[bti_mask] = np.median(signal[gti_mask])
     else:
-        GTI = np.array(
+        gti = np.array(
             [[times[0] - dt /2, times[-1] + dt / 2]])
 
     n_photons = np.sum(signal)
@@ -242,10 +336,10 @@ def accelsearch(times, signal, delta_z=1, fmin=1, fmax=1e32,
 
     detlev = detection_level(freqs_to_search.size, epsilon=0.015)
 
-    RESPONSES = _create_responses(range_z)
+    responses = _create_responses(range_z)
 
     candidate_rs, candidate_js, candidate_powers = \
-        _calculate_all_convolutions(spectr, RESPONSES, n_photons,
+        _calculate_all_convolutions(spectr, responses, n_photons,
                                     freq_intv_to_search, detlev,
                                     debug=debug, interbin=interbin,
                                     nproc=nproc)
@@ -256,7 +350,7 @@ def accelsearch(times, signal, delta_z=1, fmin=1, fmax=1e32,
         fdot = z / T**2
         prob = probability_of_power(cand_power, freqs_to_search.size)
         candidate_table.add_row(
-            [ref_time + GTI[0, 0], T, cand_power, prob, cand_freq, fdot, 0])
+            [ref_time + gti[0, 0], T, cand_power, prob, cand_freq, fdot, 0])
 
     if candidate_file is not None:
         candidate_table.write(candidate_file + '.csv', overwrite=True)
@@ -267,8 +361,29 @@ def accelsearch(times, signal, delta_z=1, fmin=1, fmax=1e32,
 def interbin_fft(freq, fft):
     """Interbinning, a la van der Klis 1989.
 
-    Allows to recover some sensitivity when the pulsation frequency
-    is close to bin edge.
+    Allows to recover some sensitivity in a power density spectrum when 
+    the pulsation frequency is close to a bin edge. Here we oversample 
+    the Fourier transform that will be used to calculate the PDS, adding
+    intermediate bins with the following values:
+
+    A_{k+1/2} = \\pi /4 (A_k - A_{k + 1})
+    
+    Please note: The new bins are not statistically independent from the
+    rest. Please use simulations to estimate the correct detection 
+    levels.
+
+    Parameters
+    ----------
+    freq : array of floats
+        The frequency array
+    fft : array of complex numbers
+        The Fourier Transform
+
+    Returns
+    new_freqs : array of floats, twice the length of the original array
+        The new frequency array
+    new_fft : array of complex numbers
+        The interbinned Fourier Transform.
 
     Examples
     --------
