@@ -153,8 +153,7 @@ def _calculate_all_convolutions(A, responses, n_photons, freq_intv_to_search,
     func = partial(_convolve_with_response, A, detlev, freq_intv_to_search,
                    interbin=interbin, n_photons=n_photons)
     with Pool(processes=nproc) as pool:
-        import tqdm
-        results = list(tqdm.tqdm(pool.imap_unordered(
+        results = list(show_progress(pool.imap_unordered(
             func, [(responses[j], j) for j in range(len_responses)]), total=len_responses))
     pool.close()
 
