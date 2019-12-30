@@ -230,8 +230,8 @@ def accelsearch(times, signal, delta_z=1, fmin=1, fmax=1e32,
     freqs_to_search = freq[freq_intv_to_search]
 
     candidate_table = Table(
-        names=['time', 'power', 'prob', 'frequency', 'fdot', 'fddot'],
-        dtype=[float] * 6)
+        names=['time', 'length', 'power', 'prob', 'frequency', 'fdot', 'fddot'],
+        dtype=[float] * 7)
 
     detlev = detection_level(freqs_to_search.size, epsilon=0.015)
 
@@ -249,7 +249,7 @@ def accelsearch(times, signal, delta_z=1, fmin=1, fmax=1e32,
         fdot = z / T**2
         prob = probability_of_power(cand_power, freqs_to_search.size)
         candidate_table.add_row(
-            [ref_time + GTI[0, 0], cand_power, prob, cand_freq, fdot, 0])
+            [ref_time + GTI[0, 0], T, cand_power, prob, cand_freq, fdot, 0])
 
     if candidate_file is not None:
         candidate_table.write(candidate_file + '.csv', overwrite=True)
