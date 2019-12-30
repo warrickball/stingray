@@ -3,7 +3,7 @@ from multiprocessing import Pool
 
 import numpy as np
 import scipy
-from scipy import special
+from scipy import special, stats
 from astropy import log
 from astropy.table import Table
 
@@ -31,10 +31,6 @@ def probability_of_power(level, nbins, n_summed_spectra=1, n_rebin=1):
     the 2-dof :math:`{\chi}^2` statistics, corrected for rebinning (n_rebin)
     and multiple PDS averaging (n_summed_spectra)
     """
-    try:
-        from scipy import stats
-    except Exception:  # pragma: no cover
-        raise Exception('You need Scipy to use this function')
 
     epsilon = nbins * stats.chi2.sf(level * n_summed_spectra * n_rebin,
                                     2 * n_summed_spectra * n_rebin)
@@ -55,19 +51,14 @@ def detection_level(nbins, epsilon=0.01, n_summed_spectra=1, n_rebin=1):
     >>> np.allclose(detection_level(1, 0.1, n_rebin=[1]), [4.6], atol=0.1)
     True
     """
-    try:
-        from scipy import stats
-    except Exception:  # pragma: no cover
-        raise Exception('You need Scipy to use this function')
-
-    if not isinstance(n_rebin, Iterable):
-        r = n_rebin
-        retlev = stats.chi2.isf(epsilon / nbins, 2 * n_summed_spectra * r) \
-            / (n_summed_spectra * r)
-    else:
+    if isinstance(n_rebin, Iterable):
         retlev = [stats.chi2.isf(epsilon / nbins, 2 * n_summed_spectra * r) /
                   (n_summed_spectra * r) for r in n_rebin]
         retlev = np.array(retlev)
+    else:
+        r = n_rebin
+        retlev = stats.chi2.isf(epsilon / nbins, 2 * n_summed_spectra * r) \
+            / (n_summed_spectra * r)
     return retlev
 
 
