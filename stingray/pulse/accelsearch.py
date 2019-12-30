@@ -80,6 +80,22 @@ def detection_level(nbins, epsilon=0.01, n_summed_spectra=1, n_rebin=1):
 
 
 def _create_responses(range_z):
+    """Create responses corresponding to different accelerations.
+    
+    This is the implementation of Eq. 39 in Ransom, Eikenberry & 
+    Middleditch 2002. See that paper for details
+    
+    Parameters
+    ----------
+    range_z : int
+        List of z values to be used for the calculation.
+    
+    Returns
+    -------
+    responses : list
+        List of arrays describing the shape of the response function
+        corresponding to each value of ``range_z``.
+    """
     log.info("Creating responses")
     responses = []
     for j, z in enumerate(show_progress(range_z)):
@@ -88,7 +104,7 @@ def _create_responses(range_z):
              responses.append(0)
              continue
 
-        m = np.max([np.abs(np.int( 2 * z)), 40]) #np.abs( np.rint( ( 2 * z ) ) )#maximum_m_idx
+        m = np.max([np.abs(np.int( 2 * z)), 40]) 
         sign = z / np.abs(z)
         absz = np.abs(z)
         factor = sign * 1 / scipy.sqrt( 2 * absz)
