@@ -155,7 +155,8 @@ def _convolve_with_response(A, detlev, freq_intv_to_search, response_and_j,
         List containing tuples of the kind (r, j, power) where 
         r is the frequency in units of 1/ T, j is the index of the
         acceleration response used and power is the spectral power
-    """    response, j = response_and_j
+    """
+    response, j = response_and_j
     r_freqs = np.arange(A.size)
     if np.asarray(response).size == 1:
         accel = A
