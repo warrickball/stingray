@@ -47,7 +47,8 @@ def probability_of_power(level, ntrials=1, n_summed_spectra=1, n_rebin=1):
     Returns
     -------
     epsilon : float
-        The probability value(s)"""
+        The probability value(s)
+    """
 
     epsilon = 1 - stats.chi2.cdf(level * n_summed_spectra * n_rebin,
                                  2 * n_summed_spectra * n_rebin) ** ntrials
