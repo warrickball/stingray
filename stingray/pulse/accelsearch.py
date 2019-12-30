@@ -10,7 +10,7 @@ from astropy.table import Table
 try:
     from tqdm import tqdm as show_progress
 except ImportError:
-    def show_progress(a):
+    def show_progress(a, **kwargs):
         return a
 
 from ..utils import njit, prange
