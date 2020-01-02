@@ -24,7 +24,7 @@ env:
         # The following versions are the 'default' for tests, unless
         # overidden underneath. They are defined here in order to save having
         # to repeat them for all configurations.
-        - ASTROPY_VERSION=stable
+        - ASTROPY_VERSION=3
         - NUMPY_VERSION=stable
 
         - SETUP_CMD='test --coverage'
