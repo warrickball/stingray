@@ -476,9 +476,13 @@ class EventList(object):
                                          **kwargs)
 
         for attr in 'time', 'energy', 'pi':
-            if hasattr(new_ev, attr):
-                setattr(new_ev, attr, getattr(new_ev, attr)[mask])
-
+            try:
+                if getattr(new_ev, attr) is None:
+                     continue
+                else:
+                    setattr(new_ev, attr, getattr(new_ev, attr)[mask])
+            except AttributeError:
+                continue
         if local_retall:
             new_ev = [new_ev, retall]
 
