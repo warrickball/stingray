@@ -28,6 +28,9 @@ class TestEvents(object):
                          [1000, 2040, 1000, 3000, 4020, 2070]]
         self.gti = np.asarray([[0, 4]])
 
+    def test_import_from_top_level(self):
+        from stingray import EventList
+
     def test_inequal_length(self):
         """Check that exception is raised in case of
         disparity in length of 'time' and 'energy'

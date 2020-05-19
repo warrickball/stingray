@@ -1,7 +1,7 @@
 
 import numpy as np
 
-from stingray.io import read, write
+from ..io import read, write
 
 """
 Implementation of time and energy averaged responses from 2-d

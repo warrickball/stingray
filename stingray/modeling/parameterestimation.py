@@ -278,6 +278,10 @@ class OptimizationResults(object):
                                       np.logical_or(fixed, tied)) \
                     if not f]
 
+
+        print("self.p_opt: " + str(self.p_opt))
+        print("self.err: " + str(self.err))
+
         all_parnames = [n for n in lpost.model.param_names]
         for i, par in enumerate(all_parnames):
             log.info("{:3}) Parameter {:<20}: ".format(i, par))

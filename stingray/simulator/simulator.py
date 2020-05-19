@@ -4,9 +4,12 @@ import numbers
 from scipy import signal
 import astropy.modeling.models
 
-from stingray import Lightcurve, AveragedPowerspectrum, io, utils
-import stingray.simulator.models as models
+from ..lightcurve import Lightcurve
+from ..powerspectrum import AveragedPowerspectrum
+from .. import io
+from .. import utils
 
+from stingray.simulator import models
 
 class Simulator(object):
     """
