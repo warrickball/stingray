@@ -347,7 +347,7 @@ class Simulator(object):
         long_lc = self._find_inverse(real, imaginary)
         lc = Lightcurve(self.time, self._extract_and_scale(long_lc),
                         err=np.zeros_like(self.time) + np.sqrt(self.mean),
-                        err_dist='gauss', dt=self.dt)
+                        err_dist='gauss', dt=self.dt, skip_checks=True)
 
         return lc
 
@@ -380,7 +380,7 @@ class Simulator(object):
         lc = self._find_inverse(real, imaginary)
         lc = Lightcurve(self.time, self._extract_and_scale(lc),
                         err=np.zeros_like(self.time) + np.sqrt(self.mean),
-                        err_dist='gauss', dt=self.dt)
+                        err_dist='gauss', dt=self.dt, skip_checks=True)
 
         return lc
 
@@ -417,7 +417,7 @@ class Simulator(object):
 
         lc = Lightcurve(self.time, self._extract_and_scale(long_lc),
                         err=np.zeros_like(self.time) + np.sqrt(self.mean),
-                        err_dist='gauss', dt=self.dt)
+                        err_dist='gauss', dt=self.dt, skip_checks=True)
         return lc
 
 
@@ -460,7 +460,7 @@ class Simulator(object):
 
             lc = Lightcurve(self.time, self._extract_and_scale(long_lc),
                             err=np.zeros_like(self.time) + np.sqrt(self.mean),
-                            err_dist='gauss', dt=self.dt)
+                            err_dist='gauss', dt=self.dt, skip_checks=True)
             return lc
         else:
             raise ValueError('Model is not defined!')
@@ -500,7 +500,8 @@ class Simulator(object):
 
         time = self.dt * np.arange(len(lc)) + self.tstart
         return Lightcurve(time, lc, err_dist='gauss', dt=self.dt,
-                          err=np.zeros_like(self.time) + np.sqrt(self.mean))
+                          err=np.zeros_like(self.time) + np.sqrt(self.mean),
+                          skip_checks=True)
 
     def _find_inverse(self, real, imaginary):
         """
