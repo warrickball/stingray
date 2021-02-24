@@ -311,6 +311,7 @@ def olsStep(x,
             rfftn=None,
             irfftn=None,
             mode='constant',
+            use_cuda=False,
             **kwargs):
     """Implements a single step of the overlap-save algorithm
 
@@ -388,12 +389,21 @@ def olsStep(x,
         slice(start - border, start + length + nh - 1 - border)
         for (start, length, nh, border) in zip(starts, lengths, nh, border))
     xpart = padEdges(x, slices, mode=mode, **kwargs)
-    output = irfftn(rfftn(xpart, nfft) * hfftconj, nfft)
+    if use_cuda:
+        import cupy as cp
+        rfftn = cp.fft.fftn
+        irfftn = cp.fft.ifftn
+        xpart = cp.asarray(xpart)
+
+    rf = rfftn(xpart, nfft)
+    output = irfftn(rf * hfftconj, nfft)
+    if use_cuda:
+        output = cp.asnumpy(output)
     return output[tuple(slice(0, s) for s in lengths)]
 
 
 def ols(x, h, size=None, nfft=None, out=None, rfftn=None, irfftn=None,
-        mode='constant', **kwargs):
+        mode='constant', use_cuda=False, **kwargs):
     """Perform multidimensional overlap-save fast-convolution.
 
     As mentioned in the module docstring, the output of this function will be
@@ -481,6 +491,10 @@ def ols(x, h, size=None, nfft=None, out=None, rfftn=None, irfftn=None,
     if out is None:
         out = np.zeros(x.shape, dtype=x.dtype)
 
+    if use_cuda:
+        import cupy as cp
+        hpre = cp.asarray(hpre)
+
     for tup in array_range([0 for _ in out.shape], out.shape, size):
         out[tup] = olsStep(
             x,
@@ -491,5 +505,6 @@ def ols(x, h, size=None, nfft=None, out=None, rfftn=None, irfftn=None,
             rfftn=rfftn,
             irfftn=irfftn,
             mode=mode,
+            use_cuda=use_cuda,
             **kwargs)
     return out

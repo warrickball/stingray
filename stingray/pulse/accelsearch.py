@@ -32,7 +32,7 @@ from ..stats import pds_probability, pds_detection_level
 from ..gti import create_gti_mask
 
 
-def convolve_ols(a, b, memout=None):
+def convolve_ols(a, b, memout=None, use_cuda=False):
     """Convolution using overlap-and-save.
 
     The code for the convolution, as implemented by Ahmed Fasih, is under
@@ -58,19 +58,20 @@ def convolve_ols(a, b, memout=None):
     if isinstance(a, str):
         a = np.lib.format.open_memmap(a)
 
-    return ols(a, b,
+    val = ols(a, b,
                size=[
                    max(4 * x, int(pow(100000, 1/len(b.shape))))
                    for x in b.shape],
-               rfftn=fftn, irfftn=ifftn, out=memout)
+               rfftn=fftn, irfftn=ifftn, out=memout, use_cuda=use_cuda)
+    return val
 
 
-def convolve(a, b, mode='ols', memout=None):
+def convolve(a, b, mode='ols', memout=None, use_cuda=False):
     if np.version.version.split('.') <= ['1', '15', '0']:
         mode = 'scipy'
 
     if mode == 'ols':
-        return convolve_ols(a, b, memout=memout)
+        return convolve_ols(a, b, memout=memout, use_cuda=use_cuda)
 
     return scipy.signal.fftconvolve(a, b, mode='same')
 
@@ -125,7 +126,7 @@ def _create_responses(range_z):
 
 
 def _convolve_with_response(A, detlev, freq_intv_to_search, response_and_j,
-                            interbin=False, memout=None):
+                            interbin=False, memout=None, use_cuda=False):
     """Accelerate the Fourier transform and find pulsations.
 
     This function convolves the initial Fourier transform with the response
@@ -170,7 +171,7 @@ def _convolve_with_response(A, detlev, freq_intv_to_search, response_and_j,
     if np.asarray(response).size == 1:
         accel = A
     else:
-        accel = convolve(A, response, memout=memout)
+        accel = convolve(A, response, memout=memout, use_cuda=use_cuda)
         # new_size = accel.size
         # diff = new_size - A.size
         # Now uses 'same'
@@ -198,7 +199,7 @@ def _convolve_with_response(A, detlev, freq_intv_to_search, response_and_j,
 
 def _calculate_all_convolutions(A, responses, freq_intv_to_search,
                                 detlev, debug=False, interbin=False,
-                                nproc=4):
+                                nproc=4, use_cuda=False):
     """Accelerate the initial Fourier transform and find pulsations.
 
     This function convolves the initial Fourier transform with the responses
@@ -257,7 +258,7 @@ def _calculate_all_convolutions(A, responses, freq_intv_to_search,
 
     from functools import partial
     func = partial(_convolve_with_response, A, detlev, freq_intv_to_search,
-                   interbin=interbin, memout=memout)
+                   interbin=interbin, memout=memout, use_cuda=use_cuda)
 
     if nproc == 1:
         results = []
@@ -284,7 +285,7 @@ def _calculate_all_convolutions(A, responses, freq_intv_to_search,
 def accelsearch(times, signal, delta_z=1, fmin=1, fmax=1e32,
                 gti=None, zmax=100, candidate_file=None, ref_time=0,
                 debug=False, interbin=False, nproc=4, det_p_value=0.15,
-                fft_rescale=None):
+                fft_rescale=None, use_cuda=False):
     """Find pulsars with accelerated search.
 
     The theory behind these methods is described in Ransom+02, AJ 124, 1788.
@@ -408,7 +409,7 @@ def accelsearch(times, signal, delta_z=1, fmin=1, fmax=1e32,
         _calculate_all_convolutions(spectr, responses,
                                     freq_intv_to_search, detlev,
                                     debug=debug, interbin=interbin,
-                                    nproc=nproc)
+                                    nproc=nproc, use_cuda=use_cuda)
 
     for r, j, cand_power in zip(candidate_rs, candidate_js, candidate_powers):
         z = range_z[j]
