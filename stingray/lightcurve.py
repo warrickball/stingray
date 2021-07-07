@@ -1782,4 +1782,4 @@ class Lightcurve(object):
         self._meancounts = None
         self._n = None
         self.tseg = np.max(self.gti) - np.min(self.gti)
-        self.tstart = self.time - 0.5 * self.dt
+        self.tstart = np.min(self.gti)
