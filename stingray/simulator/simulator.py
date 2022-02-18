@@ -15,9 +15,35 @@ __all__ = ['Simulator']
 
 class Simulator(object):
     """
-    Methods to simulate and visualize light curves.
 
-    TODO: Improve documentation
+    Broad class of tools and methods to simulate light curves 
+    from power spectral shapes and impulse response functions.
+
+    Simulation proceeds as a two-step process: (1) instatiating 
+    an object of class `Simulator`, with the properties of the 
+    output light curve (number of data points, time resolution, mean 
+    and rms), followed by a call to the `simulate` method, which 
+    can take a number of different inputs (an array of powers, for example)
+    and will generate a light curve with the expected properties.
+
+    Note that the output light curve will adhere to the exact 
+    specifications of the input (i.e. the exact mean and variance) and will 
+    not contain any measurement noise. It is to be considered the 
+    input for further modifications that will make it more closely approximate 
+    real data. It will also be subject to red noise leakage. To avoid 
+    this, you may want to set the `red_noise` keyword argument to a value 
+    larger than 1.  
+
+    Poisson noise can be added through the `poisson` keyword argument. 
+  
+    Because the output light curve will have the exact input rms and 
+    mean, large samples of the output light curves will not necessarily 
+    follow the expected statistical distributions, because in reality, 
+    the rms is a random number around the input value. This effect is 
+    likely to be very small for most realistic applications, but for studies 
+    of statistical properties using large samples of simulated light curves, 
+    you may want to set `exact=True` to preserve the statistical properties 
+    of the Fourier amplitudes exactly. 
 
     Parameters
     ----------
@@ -39,10 +65,17 @@ class Simulator(object):
         seed value for random processes
     poisson : bool, default False
         return Poisson-distributed light curves.
+    exact : bool, default True
+        If True, return light curves with the exact rms
+        value (does not preserve statistical properties).
+        If False, the rms of the output light curve will vary 
+        randomly around the input value, but the statistical 
+        properties will be preserved.
     """
 
     def __init__(self, dt, N, mean, rms, err=0., red_noise=1,
-                 random_state=None, tstart=0.0, poisson=False):
+                 random_state=None, tstart=0.0, poisson=False,
+                 exact=True):
         self.dt = dt
 
         if not isinstance(N, (int, np.integer)):
@@ -56,6 +89,7 @@ class Simulator(object):
         self.mean = mean
         self.nphot = self.mean * self.N
         self.rms = rms
+        self.exact = exact
         self.red_noise = red_noise
         self.tstart = tstart
         self.time = dt*np.arange(N) + self.tstart
@@ -376,7 +410,14 @@ class Simulator(object):
 
         counts = self._find_inverse(real, imaginary)
 
-        self.std = counts.std()
+        if not exact:
+            self.std = counts.std()
+        else:
+            if self.nphot == 0:
+                nphot = 1.0
+            else:
+                nphot = self.nphot
+            self.std = np.sqrt((nphot / (self.N**2.)) * (np.sum(pds_shape[:-1]) + 0.5*pds_shape[-1]))
 
         rescaled_counts = self._extract_and_scale(counts)
         err = np.zeros_like(rescaled_counts)
