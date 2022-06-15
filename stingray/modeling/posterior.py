@@ -10,7 +10,16 @@ np.seterr('warn')
 
 from scipy.special import gamma as scipy_gamma
 from scipy.special import gammaln as scipy_gammaln
-from astropy.modeling.fitting import _fitter_to_model_params
+
+# as of astropy v5.1, the below are public methods, and 
+# the private ones throw deprecation warnings
+# remove statement when astropy <5.1 is no longer supported
+try:
+    from astropy.modeling.fitting import fitter_to_model_params
+except ImportError:
+    from astropy.modeling.fitting import _fitter_to_model_params \
+         as fitter_to_model_params
+
 from astropy.modeling import models
 
 from stingray import Lightcurve, Powerspectrum
@@ -277,7 +286,7 @@ class GaussianLogLikelihood(LogLikelihood):
             raise IncorrectParameterError("Input parameters must" +
                                           " match model parameters!")
 
-        _fitter_to_model_params(self.model, pars)
+        fitter_to_model_params(self.model, pars)
 
         mean_model = self.model(self.x)
 
@@ -363,7 +372,7 @@ class PoissonLogLikelihood(LogLikelihood):
             raise IncorrectParameterError("Input parameters must" +
                                           " match model parameters!")
 
-        _fitter_to_model_params(self.model, pars)
+        fitter_to_model_params(self.model, pars)
 
         mean_model = self.model(self.x)
 
@@ -456,7 +465,7 @@ class PSDLogLikelihood(LogLikelihood):
             raise IncorrectParameterError("Input parameters must" +
                                           " match model parameters!")
 
-        _fitter_to_model_params(self.model, pars)
+        fitter_to_model_params(self.model, pars)
 
 
         mean_model = self.model(self.x)
@@ -553,7 +562,7 @@ class LaplaceLogLikelihood(LogLikelihood):
             raise IncorrectParameterError("Input parameters must" +
                                           " match model parameters!")
 
-        _fitter_to_model_params(self.model, pars)
+        fitter_to_model_params(self.model, pars)
 
         mean_model = self.model(self.x)
 

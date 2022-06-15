@@ -6,7 +6,15 @@ import logging
 
 from astropy.tests.helper import pytest, catch_warnings
 from astropy.modeling import models
-from astropy.modeling.fitting import _fitter_to_model_params
+
+# as of astropy v5.1, the below are public methods, and 
+# the private ones throw deprecation warnings
+# remove statement when astropy <5.1 is no longer supported
+try:
+    from astropy.modeling.fitting import fitter_to_model_params
+except ImportError:
+    from astropy.modeling.fitting import _fitter_to_model_params \
+         as fitter_to_model_params
 
 from stingray import Powerspectrum, AveragedPowerspectrum
 from stingray.modeling import ParameterEstimation, PSDParEst, \
@@ -304,7 +312,7 @@ class TestOptimizationResults(object):
                        "mfit"), "OptimizationResult object should have mfit " \
                                 "attribute at this point!"
 
-        _fitter_to_model_params(self.model, self.opt.x)
+        fitter_to_model_params(self.model, self.opt.x)
         mfit_test = self.model(self.lpost.x)
 
         assert np.allclose(self.optres.mfit, mfit_test)
@@ -754,7 +762,7 @@ class TestPSDParEst(object):
         pe = PSDParEst(self.ps)
 
         m = self.model
-        _fitter_to_model_params(m, self.t0)
+        fitter_to_model_params(m, self.t0)
 
         model = m(self.ps.freq)
 
