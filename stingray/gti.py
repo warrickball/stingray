@@ -840,15 +840,16 @@ def get_btis(gtis, start_time=None, stop_time=None):
 
 
 @jit(nopython=True)
-def _check_separate(gti0, gti1):
+def _check_separate(gti0, gti1, strict=False):
     """Numba-compiled core of ``check_separate``."""
     gti0_start = gti0[:, 0]
     gti0_end = gti0[:, 1]
     gti1_start = gti1[:, 0]
     gti1_end = gti1[:, 1]
 
-    if (gti0_end[-1] <= gti1_start[0]) or (gti1_end[-1] <= gti0_start[0]):
-        return True
+    if not strict:
+        if (gti0_end[-1] <= gti1_start[0]) or (gti1_end[-1] <= gti0_start[0]):
+            return True
 
     for g in gti1.flatten():
         for g0, g1 in zip(gti0[:, 0], gti0[:, 1]):
@@ -861,7 +862,7 @@ def _check_separate(gti0, gti1):
     return True
 
 
-def check_separate(gti0, gti1):
+def check_separate(gti0, gti1, strict=False):
     """
     Check if two GTIs do not overlap.
 
@@ -872,6 +873,11 @@ def check_separate(gti0, gti1):
 
     gti1: 2-d float array
         List of GTIs of form ``[[gti0_0, gti0_1], [gti1_0, gti1_1], ...]``.
+
+    Other parameters
+    ----------------
+    strict: bool
+        Check if they are strictly separated (no touching whatsoever)
 
     Returns
     -------
@@ -890,8 +896,10 @@ def check_separate(gti0, gti1):
     False
     >>> gti0 = [[0, 10]]
     >>> gti1 = [[10, 20]]
-    >>> check_separate(gti0, gti1)
+    >>> check_separate(gti0, gti1, strict=False)
     True
+    >>> check_separate(gti0, gti1, strict=True)
+    False
     >>> gti0 = [[0, 11]]
     >>> gti1 = [[10, 20]]
     >>> check_separate(gti0, gti1)
@@ -916,7 +924,8 @@ def check_separate(gti0, gti1):
     check_gtis(gti1)
     t0 = min(gti0[0, 0], gti1[0, 0])
     return _check_separate((gti0 - t0).astype(np.double),
-                           (gti1 - t0).astype(np.double))
+                           (gti1 - t0).astype(np.double),
+                           strict=strict)
 
 
 def join_equal_gti_boundaries(gti, threshold=0.0):
