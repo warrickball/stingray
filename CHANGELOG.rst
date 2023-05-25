@@ -5,7 +5,7 @@ New Features
 ^^^^^^^^^^^^
 
 - Phase Dispersion Minimization as a method to search for periodic signals
-  in data is now implemented in the ``istingray.pulse`` submodule. To use it,
+  in data is now implemented in the ``stingray.pulse`` submodule. To use it,
   you can use the ``phase_dispersion_search`` function in
   ``stingray.pulse.search``. The accompanying statistical tests are located
   in the ``stingray.stats`` module, under ``phase_dispersion_probability``,
