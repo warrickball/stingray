@@ -498,7 +498,7 @@ def get_prior(params_list, prior_dict):
     return prior_model
 
 
-def get_log_likelihood(params_list, kernel_type, mean_type, times, counts, **kwargs):
+def get_log_likelihood(params_list, kernel_type, mean_type, times, counts, counts_err=None):
     """
     A log likelihood generator function based on given values.
     Makes a jaxns specific log likelihood function which takes in the
@@ -530,6 +530,9 @@ def get_log_likelihood(params_list, kernel_type, mean_type, times, counts, **kwa
     counts: np.array or jnp.array
         The photon counts array of the lightcurve
 
+    counts_err : np.array or jnp.array
+        The uncertainties on the counts or fluxes given
+        in `counts`. Must be of same shape as `counts`
     Returns
     -------
     The Jaxns specific log likelihood function.
@@ -541,6 +544,8 @@ def get_log_likelihood(params_list, kernel_type, mean_type, times, counts, **kwa
     if not can_make_gp:
         raise ImportError("Tinygp is required to make the GP model.")
 
+    if counts_err is None:
+        counts_err = jnp.zeros_like(counts)
     @jit
     def likelihood_model(*args):
         param_dict = {}
@@ -551,7 +556,7 @@ def get_log_likelihood(params_list, kernel_type, mean_type, times, counts, **kwa
                 param_dict[params] = args[i]
         kernel = get_kernel(kernel_type=kernel_type, kernel_params=param_dict)
         mean = get_mean(mean_type=mean_type, mean_params=param_dict)
-        gp = GaussianProcess(kernel, times, mean_value=mean(times))
+        gp = GaussianProcess(kernel, times, mean_value=mean(times), diag=counts_err)
         return gp.log_probability(counts)
 
     return likelihood_model
@@ -573,6 +578,10 @@ class GPResult:
         self.lc = lc
         self.time = lc.time
         self.counts = lc.counts
+
+        if lc.err_dist == "poisson":
+            self.counts_err = jnp.sqrt(self.counts)
+
         self.result = None
 
     def sample(self, prior_model=None, likelihood_model=None, max_samples=1e4,
