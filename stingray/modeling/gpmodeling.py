@@ -51,7 +51,7 @@ def get_kernel(kernel_type, kernel_params):
     kernel_type: string
         The type of kernel to be used for the Gaussian Process
         To be selected from the kernels already implemented:
-        ["RN", "QPO", "QPO_plus_RN"]
+        ["RN", "QPO", "QPO_plus_RN", "CARMA", "QPO_plus_CARMA"]
 
     kernel_params: dict
         Dictionary containing the parameters for the kernel
@@ -81,6 +81,26 @@ def get_kernel(kernel_type, kernel_params):
         return kernel
     elif kernel_type == "QPO":
         kernel = kernels.quasisep.Celerite(
+            a=kernel_params["aqpo"],
+            b=0.0,
+            c=kernel_params["cqpo"],
+            d=2 * jnp.pi * kernel_params["freq"],
+        )
+        return kernel
+    elif kernel_type == "CARMA":
+        alpha = kernel_params["alpha"]
+        beta = kernel_params["beta"]
+        acarma = kernel_params["acarma"]
+        kernel = kernels.quasisep.CARMA.init(
+            alpha=alpha, beta=beta, sigma=acarma**0.5
+        )
+        return kernel
+    elif kernel_type == "QPO_plus_CARMA":
+        kernel = kernels.quasisep.CARMA.init(
+            alpha = kernel_params["alpha"],
+            beta = kernel_params["beta"],
+            sigma = kernel_params["acarma"] ** 0.5
+        ) + kernels.quasisep.Celerite(
             a=kernel_params["aqpo"],
             b=0.0,
             c=kernel_params["cqpo"],
@@ -366,6 +386,11 @@ def _get_kernel_params(kernel_type):
         return ["log_arn", "log_crn", "log_aqpo", "log_cqpo", "log_freq"]
     elif kernel_type == "QPO":
         return ["log_aqpo", "log_cqpo", "log_freq"]
+    elif kernel_type == "CARMA":
+        return ["log_alpha", "log_beta", "log_acarma"]
+    elif kernel_type == "QPO_plus_CARMA":
+        return ["log_alpha", "log_beta", "log_acarma",
+                "log_aqpo", "log_cqpo", "log_freq"]
     else:
         raise ValueError("Kernel type not implemented")
 
@@ -427,7 +452,7 @@ def get_gp_params(kernel_type, mean_type):
     return kernel_params
 
 
-def get_prior(params_list, prior_dict):
+def get_prior(params_list, prior_dict, p=1, q=1):
     """
     A prior generator function based on given values.
     Makes a jaxns specific prior function based on the given prior dictionary.
@@ -446,6 +471,9 @@ def get_prior(params_list, prior_dict):
         **Note**: If jaxns priors are used, then the name given to them should be the same as
         the corresponding name in the params_list.
         Also, if a parameter is to be used in the log scale, it should have a prefix of "log_"
+
+    p, q: int, int, default 1
+        The orders for the CARMA process, must be p >= q
 
     Returns
     -------
@@ -485,14 +513,33 @@ def get_prior(params_list, prior_dict):
 
     def prior_model():
         prior_list = []
-        for i in params_list:
-            if isinstance(prior_dict[i], tfpd.Distribution):
-                parameter = yield Prior(prior_dict[i], name=i)
-            elif isinstance(prior_dict[i], Prior):
-                parameter = yield prior_dict[i]
+        for param in params_list:
+            if param == "log_alpha":
+                for j in range(p):
+                    if isinstance(prior_dict[param], tfpd.Distribution):
+                        parameter = yield Prior(prior_dict[param], name=param+str(j))
+                    elif isinstance(prior_dict[param], Prior):
+                        parameter = yield prior_dict[param]
+                    else:
+                        raise ValueError("Prior should be a tfpd distribution or a jaxns prior.")
+                    prior_list.append(parameter)
+            elif param == "log_beta":
+                for k in range(q):
+                    if isinstance(prior_dict[param], tfpd.Distribution):
+                        parameter = yield Prior(prior_dict[param], name=param+str(k))
+                    elif isinstance(prior_dict[param], Prior):
+                        parameter = yield prior_dict[param]
+                    else:
+                        raise ValueError("Prior should be a tfpd distribution or a jaxns prior.")
+                    prior_list.append(parameter)
             else:
-                raise ValueError("Prior should be a tfpd distribution or a jaxns prior.")
-            prior_list.append(parameter)
+                if isinstance(prior_dict[param], tfpd.Distribution):
+                    parameter = yield Prior(prior_dict[param], name=param + str(k))
+                elif isinstance(prior_dict[param], Prior):
+                    parameter = yield prior_dict[param]
+                else:
+                    raise ValueError("Prior should be a tfpd distribution or a jaxns prior.")
+                prior_list.append(parameter)
         return tuple(prior_list)
 
     return prior_model
@@ -533,6 +580,7 @@ def get_log_likelihood(params_list, kernel_type, mean_type, times, counts, count
     counts_err : np.array or jnp.array
         The uncertainties on the counts or fluxes given
         in `counts`. Must be of same shape as `counts`
+
     Returns
     -------
     The Jaxns specific log likelihood function.
