@@ -452,7 +452,7 @@ def get_gp_params(kernel_type, mean_type):
     return kernel_params
 
 
-def get_prior(params_list, prior_dict, p=1, q=1):
+def get_prior(params_list, prior_dict, p=1, q=0):
     """
     A prior generator function based on given values.
     Makes a jaxns specific prior function based on the given prior dictionary.
@@ -545,7 +545,7 @@ def get_prior(params_list, prior_dict, p=1, q=1):
     return prior_model
 
 
-def get_log_likelihood(params_list, kernel_type, mean_type, times, counts, counts_err=None):
+def get_log_likelihood(params_list, kernel_type, mean_type, times, counts, counts_err=None, p=1, q=0):
     """
     A log likelihood generator function based on given values.
     Makes a jaxns specific log likelihood function which takes in the
@@ -597,11 +597,35 @@ def get_log_likelihood(params_list, kernel_type, mean_type, times, counts, count
     @jit
     def likelihood_model(*args):
         param_dict = {}
-        for i, params in enumerate(params_list):
-            if params[0:4] == "log_":
-                param_dict[params[4:]] = jnp.exp(args[i])
+        if p > 0:
+            param_dict["alpha"] = []
+        if q > 0:
+            param_dict["beta"] = []
+        i = 0
+        for params in params_list:
+            if (params == "alpha"):
+                for _ in range(p):
+                    param_dict["alpha"].append(args[i])
+                    i += 1
+            elif (params == "log_alpha"):
+                for _ in range(p):
+                    param_dict["alpha"].append(jnp.exp(args[i]))
+                    i += 1
+
+            if (params == "beta"):
+                for _ in range(q):
+                    param_dict["beta"].append(args[i])
+                    i += 1
+            elif (params == "log_beta"):
+                for _ in range(q):
+                    param_dict['beta'].append(jnp.exp(args[i]))
+                    i += 1
             else:
-                param_dict[params] = args[i]
+                if params[0:4] == "log_":
+                    param_dict[params[4:]] = jnp.exp(args[i])
+                else:
+                   param_dict[params] = args[i]
+                i += 1
         kernel = get_kernel(kernel_type=kernel_type, kernel_params=param_dict)
         mean = get_mean(mean_type=mean_type, mean_params=param_dict)
         gp = GaussianProcess(kernel, times, mean_value=mean(times), diag=counts_err)
