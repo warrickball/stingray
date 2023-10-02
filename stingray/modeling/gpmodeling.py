@@ -41,7 +41,7 @@ __all__ = ["get_kernel", "get_mean", "get_prior",
            "get_log_likelihood", "GPResult", "get_gp_params"]
 
 
-def get_kernel(kernel_type, kernel_params):
+def get_kernel(kernel_type, kernel_params, p=1, q=0):
     """
     Function for producing the kernel for the Gaussian Process.
     Returns the selected Tinygp kernel for the given parameters.
@@ -90,6 +90,9 @@ def get_kernel(kernel_type, kernel_params):
     elif kernel_type == "CARMA":
         alpha = kernel_params["alpha"]
         beta = kernel_params["beta"]
+
+        #jax.debug.print("alpha in get_kernel: {}", kernel_params["alpha"])
+        #jax.debug.print("beta in get_kernel: {}", kernel_params["beta"])
         acarma = kernel_params["acarma"]
         kernel = kernels.quasisep.CARMA.init(
             alpha=alpha, beta=beta, sigma=acarma**0.5
@@ -596,36 +599,31 @@ def get_log_likelihood(params_list, kernel_type, mean_type, times, counts, count
         counts_err = jnp.zeros_like(counts)
     @jit
     def likelihood_model(*args):
+        #print(f"p: {p}")
+        #print(f"q: {q}")
         param_dict = {}
-        if p > 0:
-            param_dict["alpha"] = []
-        if q > 0:
-            param_dict["beta"] = []
         i = 0
+
         for params in params_list:
             if (params == "alpha"):
-                for _ in range(p):
-                    param_dict["alpha"].append(args[i])
-                    i += 1
+                param_dict["alpha"] = args[i:i+p]
+                i += p
             elif (params == "log_alpha"):
-                for _ in range(p):
-                    param_dict["alpha"].append(jnp.exp(args[i]))
-                    i += 1
-
-            if (params == "beta"):
-                for _ in range(q):
-                    param_dict["beta"].append(args[i])
-                    i += 1
+                param_dict["alpha"] = jnp.exp(jnp.array(args[i:i+p]))
+                i += p
+            elif (params == "beta"):
+                param_dict["beta"] = args[i:i+q]
+                i += q
             elif (params == "log_beta"):
-                for _ in range(q):
-                    param_dict['beta'].append(jnp.exp(args[i]))
-                    i += 1
+                param_dict["beta"] = jnp.exp(jnp.array(args[i:i+q]))
+                i += q
             else:
                 if params[0:4] == "log_":
                     param_dict[params[4:]] = jnp.exp(args[i])
                 else:
                    param_dict[params] = args[i]
                 i += 1
+
         kernel = get_kernel(kernel_type=kernel_type, kernel_params=param_dict)
         mean = get_mean(mean_type=mean_type, mean_params=param_dict)
         gp = GaussianProcess(kernel, times, mean_value=mean(times), diag=counts_err)
