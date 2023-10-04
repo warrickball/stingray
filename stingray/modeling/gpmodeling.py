@@ -983,3 +983,190 @@ class GPResult:
                 plt.savefig(filename)
 
         return plt
+    
+    def plot_posterior_predictive(
+        self, 
+        lc, 
+        kernel_type, 
+        mean_type, 
+        nmean=50,
+        ngrid=1000, 
+        ax=None, 
+        rkey=None, 
+        p=1, 
+        q=0, 
+        counts_err=None
+    ):
+        """
+        Plot the posterior predictive distribution.
+        Will plot the maximum posterior for the Gaussian Process, and 
+        `nsamples` random draws from the mean function.
+        
+        Parameters
+        ----------
+        lc : stingray.Lightcurve object
+            The light curve with the time series data 
+            being modelled
+                    
+        kernel_type : str
+            The kernel type used in the modeling
+            
+        mean_type : str
+            The type of the mean function used
+        
+        nmean: int, default 50
+            The number of samples to use for drawing the 
+            posterior
+            
+        ngrid: int, default 1000
+            The number of points in the linear grid to 
+            use for plotting the Gaussian Process
+        
+        ax : matplotlib.Axes object, default None
+            A matplotlib.Axes object to plot into. If none is 
+            given, a new Figure object will be created
+            
+        rkey : jax.randomPRNGKey object
+            A random key for setting the sampling. If None,
+            set to random.PRNGKey(1234)
+        
+        p, q : int, int, default 1, 0
+            If the kernel involves a CARMA model, then this 
+            sets the orders of the AR and MA processes involved.
+            Note that p >= q is required
+        
+        counts_err : array, default None
+            if `None`, the error bars for the data will be set 
+            to `sqrt(lc.counts)`, otherwise to whatever is set 
+            for `counts_err`
+        
+        Returns
+        -------
+        ax : matplotlib.Axes object
+            The matplotlib.axes object that the plot is 
+            drawn in
+        """
+        if rkey is None:
+            rkey = random.PRNGKey(1234)
+
+        log_p = self.results.log_dp_mean #log-prob
+        nsamples = self.results.total_num_samples # number of samples
+
+        # array for resampled samples
+        samples_resampled = {}
+
+        # go through samples, resample with weights to get 
+        # a weighted posterior sample
+        for name in self.results.samples.keys():
+            samples = self.results.samples[name]
+
+            weights = jnp.where(jnp.isfinite(samples), jnp.exp(log_p), 0.0)
+            log_weights = jnp.where(jnp.isfinite(samples), log_p, -jnp.inf)
+            sr = resample(
+                rkey, samples, log_weights, S=max(10, int(self.results.ESS)), replace=True
+        )
+            samples_resampled[name] = sr
+
+        print("Resampling done, calculating maximum posterior model ...")
+        # split into samples belonging to the kernel, and samples 
+        # belonging to the mean function
+        kernel_params = stingray.modeling.gpmodeling._get_kernel_params(kernel_type)
+        mean_params = stingray.modeling.gpmodeling._get_mean_params(mean_type)
+
+        maxpost_log = self.get_max_posterior_parameters()
+
+        if not "CARMA" in kernel_type:
+            mean_samples = dict((k, samples_resampled[k]) for k in mean_params)
+            sk_maxpost_log = dict((k, maxpost_log[k]) for k in kernel_params)
+            sm_maxpost_log = dict((k, maxpost_log[k]) for k in mean_params)
+        else:
+            mean_samples = dict((k, samples_resampled[k+"0"]) for k in mean_params)
+            
+            kernel_params_small = test_list = [i for i in kernel_params if not ('alpha' in i or 'beta' in i)]
+            sk_maxpost_log = dict((k, maxpost_log[k+"0"]) for k in kernel_params_small)
+            
+            alpha, beta = [], []
+            for j in range(p):
+                print(j)
+                if "log_alpha" in kernel_params:
+                    alpha.append(maxpost_log["log_alpha"+str(j)])
+                else:
+                    alpha.append(maxpost_log["alpha"+str(j)])
+            for k in range(q):
+                print(k)
+                if "log_beta" in kernel_params:
+                    beta.append(maxpost_log["log_beta"+str(k)])
+                else:
+                    beta.append(maxpost_log["beta"+str(k)])
+            
+            sk_maxpost_log["log_alpha"] = alpha
+            sk_maxpost_log["log_beta"] = beta
+
+            sm_maxpost_log = dict((k, maxpost_log[k+"0"]) for k in mean_params)
+
+        sk_maxpost, sm_maxpost = {}, {}
+        for params in kernel_params:
+            if params[0:4] == "log_":
+                sk_maxpost[params[4:]] = np.exp(sk_maxpost_log[params])
+            else:
+                sk_maxpost[params] = sk_maxpost_log[params]
+
+        for params in mean_params:
+            if params[0:4] == "log_":
+                sm_maxpost[params[4:]] = np.exp(sm_maxpost_log[params])
+            else:
+                sm_maxpost[params] = sm_maxpost_log[params]
+                
+        kernel = get_kernel(kernel_type=kernel_type, kernel_params=sk_maxpost)
+        mean = get_mean(mean_type=mean_type, mean_params=sm_maxpost)
+        
+        gp = GaussianProcess(kernel, lc.time, mean_value=mean(lc.time))
+        tgrid = np.linspace(lc.time[0], lc.time[-1], ngrid)
+        _, cond = gp.condition(lc.counts, tgrid)
+
+        mu = cond.loc + mean(tgrid)
+        std = np.sqrt(cond.variance)
+
+        print("GP calculated, plotting GP and data ...")
+        
+        if ax is None:
+            fig, ax = plt.subplots(1, 1, figsize=(8,4))
+
+        if counts_err is None:
+            counts_err = np.sqrt(lc.counts)
+        ax.errorbar(lc.time, lc.counts, yerr=counts_err, 
+                    fmt="o", markersize=2, color="black",
+                    label="Observations")
+        ax.plot(tgrid, mu, color="C0", label="Gaussian Process Maximum Posterior")
+        ax.fill_between(tgrid, mu + std, mu - std, color="C0", alpha=0.3)
+
+        idx_all = np.random.choice(np.arange(0,int(gpresult.results.ESS), 1.0, dtype=int), 
+                                size=nmean,
+                                replace=False)
+        print("calculating and plotting mean functions ...")
+        for i, idx in enumerate(idx_all):
+            #sk_log = dict((k, kernel_samples[k][idx]) for k in kernel_params)
+            sm_log = dict((k, mean_samples[k][idx]) for k in mean_params)
+            sm = {}
+            for params in mean_params:
+                if params[0:4] == "log_":
+                    sm[params[4:]] = jnp.exp(sm_log[params])
+                else:
+                    sm[params] = sm_log[params]
+
+            mean = get_mean(mean_type=mean_type, mean_params=sm)
+            mean_vals = mean(tgrid)
+            
+            # legend only for the first line being drawn
+            if i == 0:
+                ax.plot(tgrid, mean_vals, color="orange", 
+                        alpha=0.1, label="Mean function posterior draws")  
+            else:
+                ax.plot(tgrid, mean_vals, color="orange", alpha=0.1)
+
+        # update legend opacity
+        leg = ax.legend()
+        for lh in leg.legendHandles: 
+            lh.set_alpha(1)
+
+        return ax
