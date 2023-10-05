@@ -626,7 +626,8 @@ def get_log_likelihood(
         kernel = get_kernel(kernel_type=kernel_type, kernel_params=param_dict)
         mean = get_mean(mean_type=mean_type, mean_params=param_dict)
         gp = GaussianProcess(kernel, times, mean_value=mean(times), diag=counts_err)
-        return gp.log_probability(counts)
+        log_like = jnp.nan_to_num(gp.log_probability(counts), nan=-1e20, posinf=-1e20, neginf=-1e20)
+        return log_like
 
     return likelihood_model
 
