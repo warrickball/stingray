@@ -38,19 +38,13 @@ try:
 except ImportError:
     comp_hessian = False
 
-from astropy.modeling.fitting import (
-    _fitter_to_model_params,
-    _model_to_fit_params,
-    _validate_model,
-    _convert_input,
-)
-
 from stingray.modeling.posterior import (
     Posterior,
     PSDPosterior,
     LogLikelihood,
     PSDLogLikelihood,
     logmin,
+    fitter_to_model_params,
 )
 
 
@@ -205,7 +199,7 @@ class OptimizationResults(object):
             The object containing the function that is being optimized
             in the regression
         """
-        _fitter_to_model_params(lpost.model, self.p_opt)
+        fitter_to_model_params(lpost.model, self.p_opt)
 
         self.mfit = lpost.model(lpost.x)
 
@@ -738,7 +732,7 @@ class ParameterEstimation(object):
         m = lpost.model
 
         # reset the parameters
-        _fitter_to_model_params(m, pars)
+        fitter_to_model_params(m, pars)
 
         # make a model spectrum
         model_data = lpost.model(lpost.x)

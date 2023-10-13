@@ -5,11 +5,11 @@ import logging
 
 from astropy.tests.helper import pytest, catch_warnings
 from astropy.modeling import models
-from astropy.modeling.fitting import _fitter_to_model_params
 
 from stingray import Powerspectrum, AveragedPowerspectrum
 from stingray.modeling import ParameterEstimation, PSDParEst, OptimizationResults, SamplingResults
 from stingray.modeling import PSDPosterior, set_logprior, PSDLogLikelihood, LogLikelihood
+from stingray.modeling.posterior import fitter_to_model_params
 
 try:
     from statsmodels.tools.numdiff import approx_hess
@@ -290,7 +290,7 @@ class TestOptimizationResults(object):
             "OptimizationResult object should have mfit " "attribute at this point!"
         )
 
-        _fitter_to_model_params(self.model, self.opt.x)
+        fitter_to_model_params(self.model, self.opt.x)
         mfit_test = self.model(self.lpost.x)
 
         assert np.allclose(self.optres.mfit, mfit_test)
@@ -728,7 +728,7 @@ class TestPSDParEst(object):
         pe = PSDParEst(self.ps)
 
         m = self.model
-        _fitter_to_model_params(m, self.t0)
+        fitter_to_model_params(m, self.t0)
 
         model = m(self.ps.freq)
 
