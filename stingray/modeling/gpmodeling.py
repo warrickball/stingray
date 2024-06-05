@@ -574,13 +574,17 @@ class GPResult:
         self.counts = lc.counts
         self.result = None
 
-    def sample(self, prior_model=None, likelihood_model=None, max_samples=1e4, num_live_points=500):
+    def sample(self, key, prior_model=None, likelihood_model=None, max_samples=1e4, num_live_points=500):
         """
         Makes a Jaxns nested sampler over the Gaussian Process, given the
         prior and likelihood model
 
         Parameters
         ----------
+
+        key : int
+            A number to initialize random numbers for sampling
+
         prior_model: jaxns.prior.PriorModelType object
             A prior generator object.
             Can be made using the get_prior function or can use your own jaxns
@@ -615,14 +619,14 @@ class GPResult:
         self.log_likelihood_model = likelihood_model
 
         nsmodel = Model(prior_model=self.prior_model, log_likelihood=self.log_likelihood_model)
-        nsmodel.sanity_check(random.PRNGKey(10), S=100)
+        nsmodel.sanity_check(random.PRNGKey(key + key), S=100)
 
         self.exact_ns = ExactNestedSampler(
             nsmodel, num_live_points=num_live_points, max_samples=max_samples
         )
 
         termination_reason, state = self.exact_ns(
-            random.PRNGKey(42), term_cond=TerminationCondition(live_evidence_frac=1e-4)
+            random.PRNGKey(key), term_cond=TerminationCondition(live_evidence_frac=1e-4)
         )
         self.results = self.exact_ns.to_results(state, termination_reason)
         print("Simulation Complete")
